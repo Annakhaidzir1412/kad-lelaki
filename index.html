@@ -980,14 +980,30 @@ const CONFIG = {
     const data = { nama, hadir, pihak:"Lelaki",
       dewasa: hadir==='Hadir' ? kiraan.dewasa : 0,
       kanak:  hadir==='Hadir' ? kiraan.kanak  : 0,
-      ucapan: $('#ucapan').value.trim(), masa:new Date().toISOString() };
+      ucapan: $('#ucapan').value.trim(), masa:new Date().toISOString(),
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2,8) };
     btn.disabled = true; btn.textContent = 'MENGHANTAR…';
     if (!C.rsvpURL){ setTimeout(()=> selesai(data), 500); return; }
-    fetch(C.rsvpURL,{method:'POST',body:JSON.stringify(data)}).then(r=>r.json())
-      .then(j=>{ if (j && j.ok) selesai(data); else throw 0; })
-      .catch(()=>{ btn.disabled=false; btn.textContent='HANTAR PENGESAHAN';
-        ralat.textContent='Pengesahan tak dapat dihantar. Cuba lagi atau WhatsApp kami terus.';
-        ralat.classList.add('on'); });
+    const kerja = hantarKeSheet(data, 1);
+    setTimeout(()=> selesai(data), 450);          // tetamu terus nampak terima kasih
+    kerja.catch(()=>{                             // gagal selepas 3 cubaan: buka semula borang
+      document.querySelectorAll('li[data-id="'+data.id+'"]').forEach(x => x.remove());
+      $('#siap').classList.remove('on'); borang.style.display='';
+      btn.disabled=false; btn.textContent='HANTAR PENGESAHAN';
+      ralat.textContent='Maaf, pengesahan belum sampai. Sila semak internet dan tekan hantar sekali lagi.';
+      ralat.classList.add('on');
+      if (!document.getElementById('mRsvp').classList.contains('on'))
+        document.querySelector('[data-buka=mRsvp]').click();
+    });
+  }
+  function hantarKeSheet(data, cubaan){
+    return fetch(C.rsvpURL, { method:'POST', body:JSON.stringify(data), keepalive:true })
+      .then(r => r.json())
+      .then(j => { if (!(j && j.ok)) throw new Error('gagal'); })
+      .catch(err => {
+        if (cubaan >= 3) throw err;
+        return new Promise(r => setTimeout(r, 1500 * cubaan)).then(()=> hantarKeSheet(data, cubaan + 1));
+      });
   }
   btn.addEventListener('click', hantarRsvp);
   borang.addEventListener('submit', hantarRsvp);
@@ -998,12 +1014,13 @@ const CONFIG = {
       ? 'Kehadiran anda untuk '+(data.dewasa+data.kanak)+' orang telah kami terima. Jumpa di majlis nanti.'
       : 'Terima kasih kerana memaklumkan. Doa anda tetap kami hargai.';
     btn.disabled=false; btn.textContent='HANTAR PENGESAHAN';
-    if (data.ucapan) tambahUcapan(data.nama, data.ucapan);
+    if (data.ucapan) tambahUcapan(data.nama, data.ucapan, data.id);
   }
-  function tambahUcapan(nama, teks){
+  function tambahUcapan(nama, teks, id){
     ['#senaraiUcapan','#bukuTetamu'].forEach(sel => {
       const ul = $(sel); if (!ul) return;
       const li = document.createElement('li'); li.innerHTML = '<p></p><cite></cite>';
+      if (id) li.dataset.id = id;
       li.querySelector('p').textContent = teks;
       li.querySelector('cite').textContent = nama;
       ul.prepend(li);
